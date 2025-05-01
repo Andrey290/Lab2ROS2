@@ -37,28 +37,40 @@ class RobotControl : public rclcpp::Node {
                 void laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
                 	RCLCPP_INFO(get_logger(), "(^0w0=^)Laser msg: %f", msg->scan_time);
         
-        		const double kMinRange = 0.55;
         		obstacle_ = false;
 
-			size_t start_index = msg->ranges.size() * 0.35;
-			size_t end_index   = msg->ranges.size() * 0.65;
+		        //size_t start_index = msg->ranges.size() * 0.35;
+			//size_t end_index   = msg->ranges.size() * 0.65;
 
-        		for (size_t i = start_index; i < end_index; i++) {
-            			if (msg->ranges[i] < kMinRange && !std::isinf(msg->ranges[i])) {
-                			obstacle_ = true;
-                			RCLCPP_INFO(get_logger(), "OBSTACLE DETECTED at ray %zu: distance = %f", i, msg->ranges[i]);
-                			break;
-            			}
-        		}
-    		}
+			// PID parameters //
+			err = 7 - msg->ranges[0];
+			// P = setpoint - input
+			P = err;
+			// I = I + (setpoint - input) * dt
+        		I += err * 0.1; // 100ms is 0.1s
+		        // D = (err - prev_err) / dt
+		        D = (err - prev_err) * 10; // *10 is cheaper than /0.1
+                        //
+			prev_err = err;
+
+			// Correction on this step
+			cor = P * kP + I * kI + D * kD;
+		}
 
     		void poseCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
         		auto orientation = msg->pose.pose.orientation;
-        		RCLCPP_DEBUG(get_logger(), 
+        		
+			double current_x = msg->pose.pose.position.x;
+			double current_y = msg->pose.pose.position.y;
+			double current_theta = 2 * atan2(orientation.z, orientation.w); 
+			
+			RCLCPP_INFO(get_logger(), 
             		"Pose msg: x = %f y = %f theta = %f",
-            		msg->pose.pose.position.x,
-            		msg->pose.pose.position.y,
-            		2 * atan2(orientation.z, orientation.w));
+            		current_x, current_y, current_theta);
+
+			double next_x = current_x + v * 0.1;
+			double next_y = current_y + cor;
+			rotation = atan2(next_y - current_y , next_x - current_x) - current_theta;
     		}
 
     		void timerCallback() {
@@ -66,21 +78,26 @@ class RobotControl : public rclcpp::Node {
         		counter++;
         		RCLCPP_INFO(get_logger(), "on timer %d", counter);
 			
-			auto cmd = geometry_msgs::msg::Twist();
-        
-        		if (!obstacle_) {
-            			RCLCPP_INFO(get_logger(), "go forward");
-            			cmd.linear.x = 0.5;
-            			cmd.angular.z = 0.0;
-        		} else {
-            			RCLCPP_INFO(get_logger(), "Spin around!");
-            			cmd.linear.x = 0.0;
-            			cmd.angular.z = 0.5;
-        		}
+			auto cmd = geometry_msgs::msg::Twist(); 
+            		
+			RCLCPP_INFO(get_logger(), "go go go!");
+            		cmd.angular.z = rotation;
+            		cmd.linear.x = v;
         
         		cmd_pub_->publish(cmd);
     		}
 	// Члены класса
+	const double kP = 1;
+	const double kI = 0;
+	const double kD = 0;
+	double P = 0;
+	double D = 0;
+	double I = 0;
+	double err = 0;
+	double prev_err = 0;
+	double cor = 0;
+	const double v = 0.5;
+	double rotation = 0.0;
     	bool obstacle_ = false;
     	rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
     	rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;

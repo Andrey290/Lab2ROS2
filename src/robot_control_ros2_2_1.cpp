@@ -37,11 +37,11 @@ class RobotControl : public rclcpp::Node {
                 void laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
                 	RCLCPP_INFO(get_logger(), "(^0w0=^)Laser msg: %f", msg->scan_time);
         
-        		const double kMinRange = 1.5;
+        		const double kMinRange = 0.55;
         		obstacle_ = false;
 
-			size_t start_index = msg->ranges.size() * 0.25;
-			size_t end_index   = msg->ranges.size() * 0.75;
+			size_t start_index = msg->ranges.size() * 0.35;
+			size_t end_index   = msg->ranges.size() * 0.65;
 
         		for (size_t i = start_index; i < end_index; i++) {
             			if (msg->ranges[i] < kMinRange && !std::isinf(msg->ranges[i])) {
@@ -74,8 +74,8 @@ class RobotControl : public rclcpp::Node {
             			cmd.angular.z = 0.0;
         		} else {
             			RCLCPP_INFO(get_logger(), "Spin around!");
-            			cmd.linear.x = -0.1;
-            			cmd.angular.z = 1.0;
+            			cmd.linear.x = 0.0;
+            			cmd.angular.z = 0.5;
         		}
         
         		cmd_pub_->publish(cmd);
